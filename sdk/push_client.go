@@ -12,7 +12,7 @@ const (
 	// DefaultHost is the default Expo host
 	DefaultHost = "https://exp.host"
 	// DefaultBaseAPIURL is the default path for API requests
-	DefaultBaseAPIURL = "/--/api/v2"
+	DefaultBaseAPIURL = "--/api/v2"
 )
 
 // DefaultHTTPClient is the default *http.Client for making API requests
@@ -68,44 +68,44 @@ func NewPushClient(config *ClientConfig) *PushClient {
 // @param push_message: A PushMessage object
 // @return an array of PushResponse objects which contains the results.
 // @return error if any requests failed
-func (c *PushClient) Publish(message *PushMessage) (PushResponse, error) {
-	responses, err := c.PublishMultiple([]PushMessage{*message})
+func (c *PushClient) Publish(message *PushMessage) (PushResponse, *http.Response, error) {
+	responses, httpResponse, err := c.PublishMultiple([]PushMessage{*message})
 	if err != nil {
-		return PushResponse{}, err
+		return PushResponse{}, httpResponse, err
 	}
-	return responses[0], nil
+	return responses[0], httpResponse, nil
 }
 
 // PublishMultiple sends multiple push notifications at once
 // @param push_messages: An array of PushMessage objects.
 // @return an array of PushResponse objects which contains the results.
 // @return error if the request failed
-func (c *PushClient) PublishMultiple(messages []PushMessage) ([]PushResponse, error) {
+func (c *PushClient) PublishMultiple(messages []PushMessage) ([]PushResponse, *http.Response, error) {
 	return c.publishInternal(messages)
 }
 
-func (c *PushClient) publishInternal(messages []PushMessage) ([]PushResponse, error) {
+func (c *PushClient) publishInternal(messages []PushMessage) ([]PushResponse, *http.Response, error) {
 	// Validate the messages
 	for _, message := range messages {
 		if len(message.To) == 0 {
-			return nil, errors.New("No recipients")
+			return nil, nil, errors.New("No recipients")
 		}
 		for _, recipient := range message.To {
 			if recipient == "" {
-				return nil, errors.New("Invalid push token")
+				return nil, nil, errors.New("Invalid push token")
 			}
 		}
 	}
-	url := fmt.Sprintf("%s%s/push/send", c.host, c.apiURL)
+	url := fmt.Sprintf("%s/%s/push/send", c.host, c.apiURL)
 	jsonBytes, err := json.Marshal(messages)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Create request w/ body
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBytes))
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	// Add appropriate headers
@@ -117,13 +117,13 @@ func (c *PushClient) publishInternal(messages []PushMessage) ([]PushResponse, er
 	// Send request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, resp, err
 	}
 
 	// Check that we didn't receive an invalid response
 	err = checkStatus(resp)
 	if err != nil {
-		return nil, err
+		return nil, resp, err
 	}
 
 	// Validate the response format first
@@ -131,27 +131,27 @@ func (c *PushClient) publishInternal(messages []PushMessage) ([]PushResponse, er
 	err = json.NewDecoder(resp.Body).Decode(&r)
 	if err != nil {
 		// The response isn't json
-		return nil, err
+		return nil, resp, err
 	}
 	// If there are errors with the entire request, raise an error now.
 	if r.Errors != nil {
-		return nil, NewPushServerError("Invalid server response", resp, r, r.Errors)
+		return nil, resp, NewPushServerError("Invalid server response", resp, r, r.Errors)
 	}
 	// We expect the response to have a 'data' field with the responses.
 	if r.Data == nil {
-		return nil, NewPushServerError("Invalid server response", resp, r, nil)
+		return nil, resp, NewPushServerError("Invalid server response", resp, r, nil)
 	}
 	// Sanity check the response
 	if len(messages) != len(r.Data) {
 		message := "Mismatched response length. Expected %d receipts but only received %d"
 		errorMessage := fmt.Sprintf(message, len(messages), len(r.Data))
-		return nil, NewPushServerError(errorMessage, resp, r, nil)
+		return nil, resp, NewPushServerError(errorMessage, resp, r, nil)
 	}
 	// Add the original message to each response for reference
 	for i := range r.Data {
 		r.Data[i].PushMessage = messages[i]
 	}
-	return r.Data, nil
+	return r.Data, resp, nil
 }
 
 func checkStatus(resp *http.Response) error {
