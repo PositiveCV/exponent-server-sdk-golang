@@ -31,8 +31,8 @@ const (
 
 // PushMessage is an object that describes a push notification request.
 // Fields:
-//	To: an ExponentPushToken
-//	Data: A dict of extra data to pass inside of the push notification.
+//	To: a slice of ExponentPushTokens
+//	Data: An object of extra data to pass inside of the push notification.
 //	      The total notification payload must be at most 4096 bytes.
 //	Title: The title to display in the notification. On iOS, this is
 //	       displayed only on Apple Watch.
@@ -54,7 +54,7 @@ const (
 type PushMessage struct {
 	To         []ExponentPushToken `json:"to"`
 	Body       string              `json:"body"`
-	Data       map[string]string   `json:"data,omitempty"`
+	Data       interface{}         `json:"data,omitempty"`
 	Sound      string              `json:"sound,omitempty"`
 	Title      string              `json:"title,omitempty"`
 	TTLSeconds int                 `json:"ttl,omitempty"`
@@ -90,7 +90,7 @@ const ErrorMessageRateExceeded = "MessageRateExceeded"
 //      'message': '"adsf" is not a registered push notification recipient'}
 type PushResponse struct {
 	PushMessage PushMessage
-	ID			string			  `json:"id"`
+	ID          string            `json:"id"`
 	Status      string            `json:"status"`
 	Message     string            `json:"message"`
 	Details     map[string]string `json:"details"`
