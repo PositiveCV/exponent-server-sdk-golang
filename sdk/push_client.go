@@ -68,12 +68,12 @@ func NewPushClient(config *ClientConfig) *PushClient {
 // @param push_message: A PushMessage object
 // @return an array of PushResponse objects which contains the results.
 // @return error if any requests failed
-func (c *PushClient) Publish(message *PushMessage) (PushResponse, *http.Response, error) {
+func (c *PushClient) Publish(message *PushMessage) ([]PushResponse, *http.Response, error) {
 	responses, httpResponse, err := c.PublishMultiple([]PushMessage{*message})
 	if err != nil {
-		return PushResponse{}, httpResponse, err
+		return nil, httpResponse, err
 	}
-	return responses[0], httpResponse, nil
+	return responses, httpResponse, nil
 }
 
 // PublishMultiple sends multiple push notifications at once
@@ -85,11 +85,16 @@ func (c *PushClient) PublishMultiple(messages []PushMessage) ([]PushResponse, *h
 }
 
 func (c *PushClient) publishInternal(messages []PushMessage) ([]PushResponse, *http.Response, error) {
+	nRecipients := 0
+
 	// Validate the messages
 	for _, message := range messages {
 		if len(message.To) == 0 {
 			return nil, nil, errors.New("No recipients")
 		}
+
+		nRecipients += len(message.To)
+
 		for _, recipient := range message.To {
 			if recipient == "" {
 				return nil, nil, errors.New("Invalid push token")
@@ -142,7 +147,7 @@ func (c *PushClient) publishInternal(messages []PushMessage) ([]PushResponse, *h
 		return nil, resp, NewPushServerError("Invalid server response", resp, r, nil)
 	}
 	// Sanity check the response
-	if len(messages) != len(r.Data) {
+	if len(r.Data) != nRecipients {
 		message := "Mismatched response length. Expected %d receipts but only received %d"
 		errorMessage := fmt.Sprintf(message, len(messages), len(r.Data))
 		return nil, resp, NewPushServerError(errorMessage, resp, r, nil)
